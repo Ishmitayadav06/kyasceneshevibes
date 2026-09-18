@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { GraduationCap, Mail, Lock, User, ArrowRight, Sparkles, GitBranch } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 type Mode = "login" | "signup"
 
@@ -24,17 +25,56 @@ export function AuthScreen({ onAuthed }: { onAuthed: (name?: string) => void }) 
   const [password, setPassword] = useState("")
   const [branch, setBranch] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState("")
 
   const isSignup = mode === "signup"
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    setError("")
     setSubmitting(true)
-    // Demo only — no real auth. Brief delay so the button state reads as a submit.
-    window.setTimeout(() => {
-      const first = name.trim().split(/\s+/)[0] || email.trim().split("@")[0]
+
+    if (isSignup) {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: name, branch },
+        },
+      })
+
+      setSubmitting(false)
+
+      if (error) {
+        setError(error.message)
+        return
+      }
+
+      // If email confirmation is off, Supabase returns a session immediately.
+      if (data.session) {
+        const first = name.trim().split(/\s+/)[0] || email.trim().split("@")[0]
+        onAuthed(first || undefined)
+      } else {
+        setError("Check your email to confirm your account, then log in.")
+        setMode("login")
+      }
+    } else {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      setSubmitting(false)
+
+      if (error) {
+        setError(error.message)
+        return
+      }
+
+      const metaName = data.user?.user_metadata?.full_name as string | undefined
+      const first = metaName?.trim().split(/\s+/)[0] || email.trim().split("@")[0]
       onAuthed(first || undefined)
-    }, 650)
+    }
   }
 
   return (
@@ -60,7 +100,10 @@ export function AuthScreen({ onAuthed }: { onAuthed: (name?: string) => void }) 
               <button
                 key={m}
                 type="button"
-                onClick={() => setMode(m)}
+                onClick={() => {
+                  setMode(m)
+                  setError("")
+                }}
                 aria-pressed={mode === m}
                 className={`rounded-full py-2 text-sm font-semibold transition-colors ${
                   mode === m
@@ -72,6 +115,12 @@ export function AuthScreen({ onAuthed }: { onAuthed: (name?: string) => void }) 
               </button>
             ))}
           </div>
+
+          {error && (
+            <p className="mt-4 rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-rose-400">
+              {error}
+            </p>
+          )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             {isSignup && (
@@ -165,10 +214,6 @@ export function AuthScreen({ onAuthed }: { onAuthed: (name?: string) => void }) 
             Continue as guest
           </button>
         </div>
-
-        <p className="mt-4 px-4 text-center text-xs leading-relaxed text-muted-foreground">
-          This is a demo page — the details you enter aren&apos;t stored anywhere.
-        </p>
       </div>
     </div>
   )
