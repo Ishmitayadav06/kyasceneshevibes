@@ -22,7 +22,7 @@ import {
   type CampusEvent,
   type CampusEventCategory,
 } from "@/lib/campus-data"
-
+import { supabase } from "@/lib/supabase"
 const categoryTone: Record<CampusEventCategory, string> = {
   Technical: "bg-violet-500/10 text-violet-600 ring-violet-500/20 dark:text-violet-300",
   Cultural: "bg-fuchsia-500/10 text-fuchsia-600 ring-fuchsia-500/20 dark:text-fuchsia-300",
@@ -643,6 +643,33 @@ export function EventsView() {
   const [active, setActive] = useState<CampusEventCategory | "All">("All")
   const [events, setEvents] = useState<CampusEvent[]>(campusEvents)
   const [addOpen, setAddOpen] = useState(false)
+  
+  useEffect(() => {
+    async function loadEvents() {
+      const { data } = await supabase
+        .from("events")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (data && data.length > 0) {
+        const dbEvents: CampusEvent[] = data.map((row) => ({
+          id: row.id,
+          name: row.name,
+          society: row.society,
+          host: row.host ?? undefined,
+          category: row.category as CampusEventCategory,
+          audience: row.audience ?? undefined,
+          date: row.date,
+          time: row.time,
+          location: row.location,
+          description: row.description,
+          registered: row.registered,
+        }))
+        setEvents([...dbEvents, ...campusEvents])
+      }
+    }
+    loadEvents()
+  }, [])
 
   const visible = useMemo(
     () => (active === "All" ? events : events.filter((e) => e.category === active)),
@@ -696,13 +723,27 @@ export function EventsView() {
         ))}
       </div>
 
-      {addOpen ? (
+            {addOpen ? (
         <AddEventModal
           onClose={() => setAddOpen(false)}
-          onCreate={(event) => {
+          onCreate={async (event) => {
             setEvents((prev) => [event, ...prev])
             setActive("All")
             setAddOpen(false)
+
+            await supabase.from("events").insert({
+              id: event.id,
+              name: event.name,
+              society: event.society,
+              host: event.host ?? null,
+              category: event.category,
+              audience: event.audience ?? null,
+              date: event.date,
+              time: event.time,
+              location: event.location,
+              description: event.description,
+              registered: event.registered,
+            })
           }}
         />
       ) : null}
